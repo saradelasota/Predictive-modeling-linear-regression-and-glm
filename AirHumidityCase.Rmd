@@ -1,0 +1,347 @@
+---
+title: "Air Humidity Caase Study"
+author: "Sara de la Sota Alonso"
+date: 'Predictive modeling UC3M, Dec 2023'
+output:
+  html_document: 
+    css: my-theme.css
+    theme: cerulean
+    highlight: tango
+    number_sections: no
+    toc: no
+    toc_depth: 1
+  pdf_document:
+    css: my-theme.css
+    theme: cerulean
+    highlight: tango
+    number_sections: yes
+    toc: yes
+    toc_depth: 1
+editor_options:
+  chunk_output_type: console
+---
+
+```{r global_options, include=T, echo = F}
+knitr::opts_chunk$set(echo = T, warning=FALSE, message=FALSE)
+```
+
+# Introduction
+
+In densely populated and polluted urban areas it can be very useful to be able to predict the relative humidity in the air. Humidity affects the dispersion and dilution of air pollutants. In high humidity conditions, pollutants may be more likely to form aerosols or droplets, leading to their removal from the air through processes like rain or gravitational settling. Conversely, low humidity can result in the suspension of fine particles, contributing to poor air quality. Moreover predicting air humidity it is crucial for maintaining energy efficiency in buildings and predicting the affect the integrity of infrastructure, such as bridges, buildings, and roads as well as .  
+
+```{r echo=FALSE}
+knitr::include_graphics("airhumiditypic.png")
+
+```
+
+
+The aim of this project is to implement 
+
+## The dataset
+The dataset contains 9358 instances of hourly averaged responses from an array of 5 metal oxide chemical sensors embedded in an Air Quality Chemical Multisensor Device. The device was located on the field in a significantly polluted area, at road level,within an Italian city. Data were recorded from March 2004 to February 2005.
+
+Data source: https://archive.ics.uci.edu/dataset/360/air+quality
+
+The dataset AirQualityUCI.csv includes the following 15 variables:
+-Date: (String) Date of the recording (MM/DD/YYYY).
+-Time: (String) Time of the recording (HH:MM:SS).
+-CO.GT.: (Integer) True hourly averaged concentration CO in mg/m^3.
+-PT08.S1.CO: (Categorical) hourly averaged sensor response (nominally CO targeted).
+-NMHC.GT.: (Integer) True hourly averaged overall Non Metanic HydroCarbons concentration in microg/m^3.	
+-C6H6.GT.:	(Continuous) True hourly averaged Benzene concentration in microg/m^3.
+-PT08.S2.NMHC.: (Categorical)	hourly averaged sensor response (nominally NMHC targeted).
+-NOx.GT.: (Integer) True hourly averaged NOx concentration in ppb.
+-PT08.S3.NOx.: (Categorical) hourly averaged sensor response (nominally NOx targeted).
+-NO2.GT.:	(Integer)	True hourly averaged NO2 concentration in microg/m^3.
+-PT08.S4.NO2.: (Categorical) hourly averaged sensor response (nominally NO2 targeted).
+-PT08.S5.O3.: (Categorical)		hourly averaged sensor response (nominally O3 targeted).
+-T: (Continuous) Temperature measured in Celsius degrees.
+-RH: (Continuous) Relative humidity in percentage.
+-AH: (Continuous) Absolute humidity.
+
+## The goal of this project
+
+The aim of this project is to predict the relative humidity.
+
+### Data preparation
+
+```{r }
+#Load the necessary libraries
+library(tidyverse)
+library(MASS)
+library(caret)
+library(e1071)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+
+df_air = read.csv("AirQualityUCI.csv")
+
+# Display the data types of columns in df_air
+str(df_air)
+
+# Count NaN values in each column
+nan_counts <- colSums(is.na(df_air))
+
+# Print the result
+print(nan_counts)
+
+
+```
+Let's delete the instances and the columns with null values:
+
+```{r}
+# Delete the last two columns
+df_air <- df_air[, -c((ncol(df_air) - 1):ncol(df_air))]
+
+# Drop rows with all NaN values
+df_air <- na.omit(df_air)
+
+# Drop rows with NaN values in the 'RH' column 
+df_air <- df_air[complete.cases(df_air$RH), ]
+
+# Count NaN values in each column after cleaning
+nan_counts <- colSums(is.na(df_air))
+
+# Print the result
+print(nan_counts)
+```
+In order to consider the hour and the month as features of hour problem we will convert the columns and extract the values and add them as a new feature.
+```{r}
+# Convert the date string into a dmy object
+df_air$Date <- mdy(df_air$Date)
+str(df_air)
+# Create a new feature with only the month
+df_air$Month <- month(df_air$Date)
+
+# Convert the time string to an hms object
+df_air$Time <- hms(df_air$Time)
+# Create a new feature with only the hour
+df_air$Hour <- hour(df_air$Time)
+```
+Missing values are tagged with -200 value. So we will replace the values tagged as -200 of each feature with the median. The instances with relative humidity (RH) equal to -200 will be removed from the dataset.
+
+```{r}
+# Replace values equal to -200 with NA in the 'RH' column
+df_air$RH[df_air$RH == -200] <- NA
+
+# Remove rows where 'RH' is NA
+df_air <- df_air[!is.na(df_air$RH), ]
+
+# Replace CO.GT. values equal to -200 with NA
+df_air$CO.GT.[df_air$CO.GT. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  CO.GT. <- ifelse(is.na(CO.GT.), ave(CO.GT., Hour, FUN = function(x) median(x, na.rm = TRUE)), CO.GT.)
+})
+
+# Replace PT08.S1.CO. values equal to -200 with NA
+df_air$PT08.S1.CO.[df_air$PT08.S1.CO. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  PT08.S1.CO. <- ifelse(is.na(PT08.S1.CO.), ave(PT08.S1.CO., Hour, FUN = function(x) median(x, na.rm = TRUE)), PT08.S1.CO.)
+})
+
+# Replace NMHC.GT. values equal to -200 with NA
+df_air$NMHC.GT.[df_air$NMHC.GT. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  NMHC.GT. <- ifelse(is.na(NMHC.GT.), ave(NMHC.GT., Hour, FUN = function(x) median(x, na.rm = TRUE)), NMHC.GT.)
+})
+
+# Replace C6H6.GT. values equal to -200 with NA
+df_air$C6H6.GT.[df_air$C6H6.GT. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  C6H6.GT. <- ifelse(is.na(C6H6.GT.), ave(C6H6.GT., Hour, FUN = function(x) median(x, na.rm = TRUE)), C6H6.GT.)
+})
+
+# Replace PT08.S2.NMHC. values equal to -200 with NA
+df_air$PT08.S2.NMHC.[df_air$PT08.S2.NMHC. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  PT08.S2.NMHC. <- ifelse(is.na(PT08.S2.NMHC.), ave(PT08.S2.NMHC., Hour, FUN = function(x) median(x, na.rm = TRUE)), PT08.S2.NMHC.)
+})
+
+# Replace NOx.GT. values equal to -200 with NA
+df_air$NOx.GT.[df_air$NOx.GT. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  NOx.GT. <- ifelse(is.na(NOx.GT.), ave(NOx.GT., Hour, FUN = function(x) median(x, na.rm = TRUE)), NOx.GT.)
+})
+
+# Replace PT08.S3.NOx. values equal to -200 with NA
+df_air$PT08.S3.NOx.[df_air$PT08.S3.NOx. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  PT08.S3.NOx. <- ifelse(is.na(PT08.S3.NOx.), ave(PT08.S3.NOx., Hour, FUN = function(x) median(x, na.rm = TRUE)), PT08.S3.NOx.)
+})
+
+# Replace NO2.GT. values equal to -200 with NA
+df_air$NO2.GT.[df_air$NO2.GT. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  NO2.GT. <- ifelse(is.na(NO2.GT.), ave(NO2.GT., Hour, FUN = function(x) median(x, na.rm = TRUE)), NO2.GT.)
+})
+
+# Replace PT08.S4.NO2. values equal to -200 with NA
+df_air$PT08.S4.NO2.[df_air$PT08.S4.NO2. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  PT08.S4.NO2. <- ifelse(is.na(PT08.S4.NO2.), ave(PT08.S4.NO2., Hour, FUN = function(x) median(x, na.rm = TRUE)), PT08.S4.NO2.)
+})
+
+# Replace PT08.S4.NO2. values equal to -200 with NA
+df_air$PT08.S4.NO2.[df_air$PT08.S4.NO2. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  PT08.S4.NO2. <- ifelse(is.na(PT08.S4.NO2.), ave(PT08.S4.NO2., Hour, FUN = function(x) median(x, na.rm = TRUE)), PT08.S4.NO2.)
+})
+
+# Replace PT08.S5.O3. values equal to -200 with NA
+df_air$PT08.S5.O3.[df_air$PT08.S5.O3. == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  PT08.S5.O3. <- ifelse(is.na(PT08.S5.O3.), ave(PT08.S5.O3., Hour, FUN = function(x) median(x, na.rm = TRUE)), PT08.S5.O3.)
+})
+
+# Replace T values equal to -200 with NA
+df_air$T[df_air$T == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  T <- ifelse(is.na(T), ave(T, Hour, FUN = function(x) median(x, na.rm = TRUE)), T)
+})
+
+# Replace AH values equal to -200 with NA
+df_air$AH[df_air$AH == -200.0] <- NA
+
+# Group by hour and calculate the median for each group
+df_air <- within(df_air, {
+  AH <- ifelse(is.na(AH), ave(AH, Hour, FUN = function(x) median(x, na.rm = TRUE)), AH)
+})
+```
+
+
+
+### Explanatory analysis
+DO HERE THE SPLIT IN TRAIN AND TEST AND USE ONLY THE TRAIN 
+```{r}
+# split between training and testing sets
+#spl = createDataPartition(df_air$RH, p = 0.7, list = FALSE)  # 70% for training
+
+#df_air_train = df_air[spl,]
+#df_air_test = df_air[-spl,]
+# Set a seed for reproducibility
+set.seed(123)
+
+# Assuming 'df_air' is your dataset
+# Use sample to create a train/test split with shuffling
+index <- sample(1:nrow(df_air), 0.8 * nrow(df_air))
+
+# Create training and testing sets
+df_air_train <- df_air[index, ]
+df_air_test <- df_air[-index, ]
+
+
+
+```
+
+
+```{r}
+# Create a line plot of 'RH' over time
+ggplot(df_air_train, aes(x = Date, y = RH)) +
+  geom_line() +
+  labs(title = "Relative Humidity Over Time",
+       x = "Time",
+       y = "Relative Humidity")
+```
+
+For our model we will use the features Month and Hour and not the Date and Time variables.
+
+```{r}
+# Eliminate the first two columns
+df_air_train <- df_air_train[, -c(1, 2)]
+df_air_test<- df_air_test[, -c(1, 2)]
+```
+
+
+```{r}
+# Create a histogram with relative frequencies of the 'RH' column
+hist(df_air_train$RH, main = "Relative Humidity Histogram", xlab = "Relative Humidity", col = "skyblue", border = "black", freq = FALSE)
+
+```
+See that the distribution is symmetric so we can check if it is better to use the logarithm but if it is symetric it is not necessary to use the logarithm.
+
+We need a naive prediction so we predict with the mean. And the interval, the width. with regression we are going to reduce the error, the width.
+
+
+
+```{r}
+library(ggplot2)
+library(corrplot)
+library(ggcorrplot)
+
+# Calculate the correlation matrix
+cor_matrix <- cor(df_air_train)
+
+# Set the overall size of the plot (adjust as needed)
+par(mfrow = c(1, 1), mar = c(0.5, 0.5, 0.5, 0.5),oma = c(1,1, 1, 1))
+
+# Create a correlation heatmap with corrplot
+corrplot(cor_matrix, method = "color", col = colorRampPalette(c("blue", "white", "red"))(100), 
+         addCoef.col = "black", tl.col = "black",tl.cex = 0.7,number.cex = 0.6, tl.srt = 45)
+
+
+```
+
+```{r}
+corr_RH <- sort(cor(df_air_train)["RH",], decreasing = T)
+corr_data <- data.frame(variable = names(corr_RH), correlation = corr_RH)
+
+library(ggplot2)
+
+ggplot(corr_data, aes(x = variable, y = correlation)) + 
+  geom_bar(stat = "identity", fill = "lightgreen") + 
+  scale_x_discrete(limits = corr_data$variable) +
+  labs(x = "", y = "Correlation with RH", title = "Correlations with RH") + 
+  theme(plot.title = element_text(hjust = 0, size = rel(1.5)),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+### Predictive analysis
+
+
+```{r}
+# Fit the linear regression model
+linFit <- lm(RH ~ log(T), data = df_air_train)
+
+# Display the summary of the linear regression model
+summary(linFit)
+```
+
+```{r}
+
+# Create a scatter plot with the regression line
+ggplot(df_air_train, aes(x = T, y = log(RH))) +
+  geom_point(alpha = 0.5) +  # Scatter plot of the data points
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Regression line
+  labs(title = "Scatter Plot with Linear Regression Line",
+       x = "Temperature (T)",
+       y = "log(Relative Humidity)") +
+  theme_minimal()
+
+```
+
