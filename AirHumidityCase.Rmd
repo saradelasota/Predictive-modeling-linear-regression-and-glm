@@ -1,5 +1,5 @@
 ---
-title: "Air Humidity Caase Study"
+title: "Air Humidity and Water quality Case Study"
 author: "Sara de la Sota Alonso"
 date: 'Predictive modeling UC3M, Dec 2023'
 output:
@@ -19,53 +19,80 @@ output:
     toc_depth: 1
 editor_options:
   chunk_output_type: console
+  markdown: 
+    wrap: sentence
 ---
 
-```{r global_options, include=T, echo = F}
+```{r , include=T, echo = F}
 knitr::opts_chunk$set(echo = T, warning=FALSE, message=FALSE)
 ```
 
-# Introduction
+For this project we will be doing two different case studies.
+In the first one we will be using linear regression models to analyse air humidity, in the second one we will be exploring water potability by implementing some GLM models.
 
-In densely populated and polluted urban areas it can be very useful to be able to predict the relative humidity in the air. Humidity affects the dispersion and dilution of air pollutants. In high humidity conditions, pollutants may be more likely to form aerosols or droplets, leading to their removal from the air through processes like rain or gravitational settling. Conversely, low humidity can result in the suspension of fine particles, contributing to poor air quality. Moreover predicting air humidity it is crucial for maintaining energy efficiency in buildings and predicting the affect the integrity of infrastructure, such as bridges, buildings, and roads as well as .  
+# Air Humidity Case study
+
+In densely populated and polluted urban areas it can be very useful to be able to predict the relative humidity in the air.
+Humidity affects the dispersion and dilution of air pollutants.
+In high humidity conditions, pollutants may be more likely to form aerosols or droplets, leading to their removal from the air through processes like rain or gravitational settling.
+Conversely, low humidity can result in the suspension of fine particles, contributing to poor air quality.
+Moreover predicting air humidity it is crucial for maintaining energy efficiency in buildings and predicting the effects in the integrity of infrastructure, such as bridges, buildings, and roads.
+In this study case we will implement some linear regression techniques to try to asses this challenge.
 
 ```{r echo=FALSE}
 knitr::include_graphics("airhumiditypic.png")
-
 ```
 
-
-The aim of this project is to implement 
-
 ## The dataset
-The dataset contains 9358 instances of hourly averaged responses from an array of 5 metal oxide chemical sensors embedded in an Air Quality Chemical Multisensor Device. The device was located on the field in a significantly polluted area, at road level,within an Italian city. Data were recorded from March 2004 to February 2005.
 
-Data source: https://archive.ics.uci.edu/dataset/360/air+quality
+The dataset contains 9358 instances of hourly averaged responses from an array of 5 metal oxide chemical sensors embedded in an Air Quality Chemical Multisensor Device.
+The device was located on the field in a significantly polluted area, at road level, within an Italian city.
+Data were recorded from March 2004 to February 2005.
 
-The dataset AirQualityUCI.csv includes the following 15 variables:
--Date: (String) Date of the recording (MM/DD/YYYY).
--Time: (String) Time of the recording (HH:MM:SS).
--CO.GT.: (Integer) True hourly averaged concentration CO in mg/m^3.
--PT08.S1.CO: (Categorical) hourly averaged sensor response (nominally CO targeted).
--NMHC.GT.: (Integer) True hourly averaged overall Non Metanic HydroCarbons concentration in microg/m^3.	
--C6H6.GT.:	(Continuous) True hourly averaged Benzene concentration in microg/m^3.
--PT08.S2.NMHC.: (Categorical)	hourly averaged sensor response (nominally NMHC targeted).
--NOx.GT.: (Integer) True hourly averaged NOx concentration in ppb.
--PT08.S3.NOx.: (Categorical) hourly averaged sensor response (nominally NOx targeted).
--NO2.GT.:	(Integer)	True hourly averaged NO2 concentration in microg/m^3.
--PT08.S4.NO2.: (Categorical) hourly averaged sensor response (nominally NO2 targeted).
--PT08.S5.O3.: (Categorical)		hourly averaged sensor response (nominally O3 targeted).
--T: (Continuous) Temperature measured in Celsius degrees.
--RH: (Continuous) Relative humidity in percentage.
--AH: (Continuous) Absolute humidity.
+Note: The missing values of the observations have been targeted with the value -200.
+
+Data source: <https://archive.ics.uci.edu/dataset/360/air+quality>
+
+The data set AirQualityUCI.csv includes the following 15 variables:
+
+-   Date: (String) Date of the recording (MM/DD/YYYY).
+
+-   Time: (String) Time of the recording (HH:MM:SS).
+
+-   CO.GT.: (Integer) True hourly averaged concentration CO in mg/m\^3.
+
+-   PT08.S1.CO: (Categorical) hourly averaged sensor response (nominally CO targeted).
+
+-   NMHC.GT.: (Integer) True hourly averaged overall Non Metanic HydroCarbons concentration in microg/m\^3.
+
+-   C6H6.GT.: (Continuous) True hourly averaged Benzene concentration in microg/m\^3.
+
+-   PT08.S2.NMHC.: (Categorical) hourly averaged sensor response (nominally NMHC targeted).
+
+-   NOx.GT.: (Integer) True hourly averaged NOx concentration in ppb.
+
+-   PT08.S3.NOx.: (Categorical) hourly averaged sensor response (nominally NOx targeted).
+
+-   NO2.GT.: (Integer) True hourly averaged NO2 concentration in microg/m\^3.
+
+-   PT08.S4.NO2.: (Categorical) hourly averaged sensor response (nominally NO2 targeted).
+
+-   PT08.S5.O3.: (Categorical) hourly averaged sensor response (nominally O3 targeted).
+
+-   T: (Continuous) Temperature measured in Celsius degrees.
+
+-   RH: (Continuous) Relative humidity in percentage.
+
+-   AH: (Continuous) Absolute humidity.
 
 ## The goal of this project
 
-The aim of this project is to predict the relative humidity.
+The aim of this project is to predict the relative humidity based on other air characteristics.
+We will not take into account the time dependency of the observations but we will consider the time and the month of the observations possible relevant features of the observations.
 
 ### Data preparation
 
-```{r }
+```{r echo=FALSE}
 #Load the necessary libraries
 library(tidyverse)
 library(MASS)
@@ -74,20 +101,31 @@ library(e1071)
 library(lubridate)
 library(dplyr)
 library(ggplot2)
+library(corrplot)
+library(ggcorrplot)
+library(effects)
 
+```
+
+First we will load the data and display the data types of each feature.
+
+```{r }
 df_air = read.csv("AirQualityUCI.csv")
 
 # Display the data types of columns in df_air
 str(df_air)
+```
 
+**Cleaning the data set**
+
+```{r}
 # Count NaN values in each column
 nan_counts <- colSums(is.na(df_air))
 
 # Print the result
 print(nan_counts)
-
-
 ```
+
 Let's delete the instances and the columns with null values:
 
 ```{r}
@@ -103,10 +141,14 @@ df_air <- df_air[complete.cases(df_air$RH), ]
 # Count NaN values in each column after cleaning
 nan_counts <- colSums(is.na(df_air))
 
-# Print the result
+# Print the result after deleting NaN values
 print(nan_counts)
 ```
-In order to consider the hour and the month as features of hour problem we will convert the columns and extract the values and add them as a new feature.
+
+**Creating Hour and Month columns**
+
+In order to consider the hour and the month as features of our problem we will convert the columns and extract the values and add two new columns as new features.
+
 ```{r}
 # Convert the date string into a dmy object
 df_air$Date <- mdy(df_air$Date)
@@ -119,45 +161,43 @@ df_air$Time <- hms(df_air$Time)
 # Create a new feature with only the hour
 df_air$Hour <- hour(df_air$Time)
 ```
-Missing values are tagged with -200 value. So we will replace the values tagged as -200 of each feature with the median. The instances with relative humidity (RH) equal to -200 will be removed from the dataset.
+
+**Treating with missing values**
+
+Missing values have been tagged with -200 value.
+So we will replace the values tagged as -200 of each feature with the median.
 
 ```{r}
+missing_values_targeted <- apply(df_air, 2, function(x) sum(x == -200))
+print(missing_values_targeted)
+```
+
+Since the feature called NMHC.GT.
+has 8443 missing value we will not be considering this specific feature.
+The instances with relative humidity (RH) equal to -200 will be removed from the data set.
+
+```{r}
+#Remove the column NMHC.GT. from the dataset
+df_air <- df_air[, !(names(df_air) %in% "NMHC.GT.")]
+
 # Replace values equal to -200 with NA in the 'RH' column
 df_air$RH[df_air$RH == -200] <- NA
 
 # Remove rows where 'RH' is NA
 df_air <- df_air[!is.na(df_air$RH), ]
+```
 
-# Replace CO.GT. values equal to -200 with NA
-df_air$CO.GT.[df_air$CO.GT. == -200.0] <- NA
+In order to do a more accurate data imputation we will be taking into account the values of the features grouped by hour.
+We replace the values tagged as -200 by the median value by hour of each corresponding column.
+We will do this for all the columns that present -200 values.
 
-# Group by hour and calculate the median for each group
-df_air <- within(df_air, {
-  CO.GT. <- ifelse(is.na(CO.GT.), ave(CO.GT., Hour, FUN = function(x) median(x, na.rm = TRUE)), CO.GT.)
-})
-
+```{r}
 # Replace PT08.S1.CO. values equal to -200 with NA
 df_air$PT08.S1.CO.[df_air$PT08.S1.CO. == -200.0] <- NA
 
 # Group by hour and calculate the median for each group
 df_air <- within(df_air, {
   PT08.S1.CO. <- ifelse(is.na(PT08.S1.CO.), ave(PT08.S1.CO., Hour, FUN = function(x) median(x, na.rm = TRUE)), PT08.S1.CO.)
-})
-
-# Replace NMHC.GT. values equal to -200 with NA
-df_air$NMHC.GT.[df_air$NMHC.GT. == -200.0] <- NA
-
-# Group by hour and calculate the median for each group
-df_air <- within(df_air, {
-  NMHC.GT. <- ifelse(is.na(NMHC.GT.), ave(NMHC.GT., Hour, FUN = function(x) median(x, na.rm = TRUE)), NMHC.GT.)
-})
-
-# Replace C6H6.GT. values equal to -200 with NA
-df_air$C6H6.GT.[df_air$C6H6.GT. == -200.0] <- NA
-
-# Group by hour and calculate the median for each group
-df_air <- within(df_air, {
-  C6H6.GT. <- ifelse(is.na(C6H6.GT.), ave(C6H6.GT., Hour, FUN = function(x) median(x, na.rm = TRUE)), C6H6.GT.)
 })
 
 # Replace PT08.S2.NMHC. values equal to -200 with NA
@@ -215,49 +255,26 @@ df_air$PT08.S5.O3.[df_air$PT08.S5.O3. == -200.0] <- NA
 df_air <- within(df_air, {
   PT08.S5.O3. <- ifelse(is.na(PT08.S5.O3.), ave(PT08.S5.O3., Hour, FUN = function(x) median(x, na.rm = TRUE)), PT08.S5.O3.)
 })
-
-# Replace T values equal to -200 with NA
-df_air$T[df_air$T == -200.0] <- NA
-
-# Group by hour and calculate the median for each group
-df_air <- within(df_air, {
-  T <- ifelse(is.na(T), ave(T, Hour, FUN = function(x) median(x, na.rm = TRUE)), T)
-})
-
-# Replace AH values equal to -200 with NA
-df_air$AH[df_air$AH == -200.0] <- NA
-
-# Group by hour and calculate the median for each group
-df_air <- within(df_air, {
-  AH <- ifelse(is.na(AH), ave(AH, Hour, FUN = function(x) median(x, na.rm = TRUE)), AH)
-})
 ```
 
+### Exploratory analysis
 
+We will split our data into train and test sets.
+Since we are not considering the temporal dependency of the observations, in order to get an illustrative training and testing set we will be shuffling the data before splitting it into train and test.
 
-### Explanatory analysis
-DO HERE THE SPLIT IN TRAIN AND TEST AND USE ONLY THE TRAIN 
 ```{r}
-# split between training and testing sets
-#spl = createDataPartition(df_air$RH, p = 0.7, list = FALSE)  # 70% for training
-
-#df_air_train = df_air[spl,]
-#df_air_test = df_air[-spl,]
 # Set a seed for reproducibility
 set.seed(123)
 
-# Assuming 'df_air' is your dataset
 # Use sample to create a train/test split with shuffling
 index <- sample(1:nrow(df_air), 0.8 * nrow(df_air))
 
 # Create training and testing sets
 df_air_train <- df_air[index, ]
 df_air_test <- df_air[-index, ]
-
-
-
 ```
 
+Even if we will not assume time dependency it could be interesting to visualize the RH in a timeline for analytic purpouses.
 
 ```{r}
 # Create a line plot of 'RH' over time
@@ -268,7 +285,9 @@ ggplot(df_air_train, aes(x = Date, y = RH)) +
        y = "Relative Humidity")
 ```
 
-For our model we will use the features Month and Hour and not the Date and Time variables.
+We observe that there is variability in the observations and the time of the year could have an influence on relative humidity.
+
+For our model we will use the features Month and Hour and not the Date and Time variables, so we will delete the first two columns.
 
 ```{r}
 # Eliminate the first two columns
@@ -276,23 +295,19 @@ df_air_train <- df_air_train[, -c(1, 2)]
 df_air_test<- df_air_test[, -c(1, 2)]
 ```
 
+Let's show the distribution of the relative humidity.
 
 ```{r}
 # Create a histogram with relative frequencies of the 'RH' column
 hist(df_air_train$RH, main = "Relative Humidity Histogram", xlab = "Relative Humidity", col = "skyblue", border = "black", freq = FALSE)
 
 ```
-See that the distribution is symmetric so we can check if it is better to use the logarithm but if it is symetric it is not necessary to use the logarithm.
 
-We need a naive prediction so we predict with the mean. And the interval, the width. with regression we are going to reduce the error, the width.
+See that the distribution is symmetric so we won't be transforming our variable for the predictions.
 
-
+We will calculate the correlation matrix to study the linear dependencies of the variables.
 
 ```{r}
-library(ggplot2)
-library(corrplot)
-library(ggcorrplot)
-
 # Calculate the correlation matrix
 cor_matrix <- cor(df_air_train)
 
@@ -310,7 +325,6 @@ corrplot(cor_matrix, method = "color", col = colorRampPalette(c("blue", "white",
 corr_RH <- sort(cor(df_air_train)["RH",], decreasing = T)
 corr_data <- data.frame(variable = names(corr_RH), correlation = corr_RH)
 
-library(ggplot2)
 
 ggplot(corr_data, aes(x = variable, y = correlation)) + 
   geom_bar(stat = "identity", fill = "lightgreen") + 
@@ -321,27 +335,476 @@ ggplot(corr_data, aes(x = variable, y = correlation)) +
 
 ```
 
+The highest correlated feature to RH is temperature (T) that has a negative correlation of -0.52, meaning that based on the data provided, as the temperature increases the relative humidity decreases with some linear dependency.
+
 ### Predictive analysis
 
+In the following sections we will implement some linear regression models.
+
+#### Simple linear regression model
+
+Since the highest correlation with the relative humidity (RH) is attributed to the variable temperature (T) we will be selecting this attribute for our linear regression model.
+As we studied before we have seen that the relative humidity has a symmetrical distribution so we will not be transforming the variable RH.
 
 ```{r}
 # Fit the linear regression model
-linFit <- lm(RH ~ log(T), data = df_air_train)
+linFit <- lm(RH ~ T, data = df_air_train)
 
 # Display the summary of the linear regression model
 summary(linFit)
 ```
 
-```{r}
+This summary includes essential information such as the coefficients, standard errors, t-values, and p-values for each predictor variable, as well as overall statistics like the R-squared value and adjusted R-squared value.
+An R-squared value of 0.34 means that approximately 34% of the variability in the dependent variable (Relative Humidity, RH) can be explained by the linear relationship with the predictor variable Temperature (T).
 
-# Create a scatter plot with the regression line
-ggplot(df_air_train, aes(x = T, y = log(RH))) +
-  geom_point(alpha = 0.5) +  # Scatter plot of the data points
-  geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Regression line
-  labs(title = "Scatter Plot with Linear Regression Line",
-       x = "Temperature (T)",
-       y = "log(Relative Humidity)") +
-  theme_minimal()
+```{r}
+par(mfrow=c(2,2))
+plot(linFit, pch=23 ,bg='orange',cex=2)
+```
+
+Let's evaluate the how this linear model performs with the test evaluation set.
+
+```{r}
+simplepred <- predict(linFit, newdata=df_air_test, interval = "prediction")
+cor(df_air_test$RH, simplepred)^2
+```
+
+A value of 0.3111 indicates that approximately 31.11% of the variability in the observed relative humidity can be attributed to the linear relationship with the temperature.The lower and upper limit of the confidence interval for the R-squared value are close to the R-squared value so the confidence interval for this metric is relatively narrow.
+
+```{r}
+# Create a scatter plot with the prediction intervals
+ggplot(df_air_test, aes(x = T, y = RH)) +
+  geom_point(color = "red") +  # Set point color to red
+  geom_ribbon(aes(ymin = simplepred[,"lwr"], ymax = simplepred[,"upr"]), fill = "blue", alpha = 0.2) +  # Set ribbon color to blue 
+  labs(title = "Prediction Intervals", y = "RH") + theme_minimal() +
+  
+  # Add prediction intervals to the plot
+  geom_line(aes(y = simplepred[, "fit"]), color = "green") +  # Prediction line
+  geom_ribbon(aes(ymin = simplepred[, "lwr"], ymax = simplepred[, "upr"]), fill = "green", alpha = 0.2)  # Prediction interval ribbon
+```
+
+This graph provides a visual understanding of how well the linear regression model captures the relationship between temperature and relative humidity.
+The red points allow for a direct comparison between observed and predicted RH values, while the blue and green ribbons show the variability and uncertainty associated with individual predictions and the overall trend, respectively.
+
+Let's see the precentage of points covered by the intervals.
+
+```{r}
+# Extracting prediction intervals
+lower_bound_s <- simplepred[, "lwr"]
+upper_bound_s <- simplepred[, "upr"]
+
+# Adding prediction intervals to the test data
+df_air_test$Lower_s <- lower_bound_s
+df_air_test$Upper_s <- upper_bound_s
+
+# Counting the points outside the intervals
+outside_interval_count_s <- sum(df_air_test$RH < df_air_test$Lower_s | df_air_test$RH > df_air_test$Upper_s)
+
+# Calculating the coverage
+total_points_s <- nrow(df_air_test)
+coverage_s <- round(100 - (outside_interval_count_s / total_points_s) * 100, digits = 1)
+
+# Printing the coverage
+print(paste("Percentage of points inside the intervals:", coverage_s, "%"))
+```
+
+#### Multiple linear regression model
+
+We will be know implementing a multiple linear regression model with the aim of obtaining a higher R-square value, and finally a better predicting model.
+Since we have see that the absolute humidity (AH) is strongly correlated with the temperature, with a correlation value of 0.66, we have decided to include this variable in our model.
+Testing other possible multiple regression models with different sets of features has showed that the model that performs best is the one we have selected to show here.
+
+```{r}
+# Fit the multiple linear regression model
+multiFit <- lm(RH ~ T + AH, data = df_air_train)
+
+# Display the summary of the linear regression model
+summary(multiFit)
+```
+
+We observe that the R-square value for this model is 0.8595 meaning that approximately 85.9% of the variability in the observed relative humidity can be attributed to the multilinear relationship between RH and the temperature and absolute humidity.
+Simply by adding one more variable to our model we have obtained a great improvement.
+
+```{r}
+multiPred <- predict(multiFit, newdata = df_air_test, interval = "prediction")
+
+# Create a scatter plot with the prediction intervals for multiple regression
+ggplot(df_air_test, aes(x = T, y = RH)) +
+  geom_point(color = "red") +  # Set point color to red
+  geom_ribbon(aes(ymin = multiPred[, "lwr"], ymax = multiPred[, "upr"]), fill = "blue", alpha = 0.2) +  # Set ribbon color to blue 
+  labs(title = "Prediction Intervals (Multiple Regression)", y = "RH") + theme_minimal() +
+  # Add prediction intervals to the plot
+  geom_ribbon(aes(ymin = multiPred[, "lwr"], ymax = multiPred[, "upr"]), fill = "green", alpha = 0.2)  # Prediction interval ribbon
+
+R2_multi_model = cor(df_air_test$RH, multiPred)^2
+R2_multi_model
+```
+
+After doing the prediction we observe that the R-square value has reached 87.1%.
+
+We will now see the percentage of points covered by the intervals.
+
+```{r}
+# Extracting prediction intervals
+lower_bound <- multiPred[, "lwr"]
+upper_bound <- multiPred[, "upr"]
+
+# Adding prediction intervals to the test data
+df_air_test$Lower <- lower_bound
+df_air_test$Upper <- upper_bound
+
+# Counting the points outside the intervals
+outside_interval_count <- sum(df_air_test$RH < df_air_test$Lower | df_air_test$RH > df_air_test$Upper)
+
+# Calculating the coverage
+total_points <- nrow(df_air_test)
+coverage <- round(100 - (outside_interval_count / total_points) * 100, digits = 1)
+
+# Printing the coverage
+print(paste("Percentage of points inside the intervals:", coverage, "%"))
 
 ```
 
+### Model selection
+
+For evaluating the different models we have obtained we consider a benchmark model, where the prediction for the relative humidity would be the mean value of the relative humidity in the training set.
+
+#### Benchmark model
+
+```{r}
+mean_RH <- mean(df_air_train$RH)
+# Create a benchmark model with constant mean predictions
+benchmark_predictions <- rep(mean_RH, nrow(df_air_test))
+```
+
+```{r}
+# Evaluate the benchmark model
+# Calculate R-squared for the benchmark model
+benchmark_r_squared <- 1 - sum((df_air_test$RH - benchmark_predictions)^2) / sum((df_air_test$RH - mean(df_air_test$RH))^2)
+cat('Benchmark R-squared:', benchmark_r_squared, '\n')
+# Calculate the Mean Square Error for the benchmark model
+benchmark_mse <- mean((df_air_test$RH - benchmark_predictions)^2)
+cat('Benchmark MSE:', benchmark_mse, '\n')
+```
+
+We observe that the benchmark performs worse than our multiple regression model and our linear regression model.
+So our final model is the multilinear model with an R-squared of 87,1%.
+
+# Water Potability Case Study
+
+The ability to predict water potability is crucial for several reasons such public health and environmental conservation.
+In this case study we will able to understand the complexity of this issue as well as identify some predictive modelling techniques to asses this problem.
+
+```{r echo=FALSE}
+knitr::include_graphics("water_quality_foto.jpeg")
+```
+
+## The dataset
+
+The water_potability.csv file contains water quality metrics for 3276 different water bodies.
+The dataset contains 9 continuous variables and one binary that is the target of the dataset:
+
+-   ph: pH water (ranges from 0 to 14).
+
+-   Hardness: Capacity of water to precipitate soap in mg/L.
+
+-   Solids: Total dissolved solids in ppm.
+
+-   Chloramines: Amount of Chloramines in ppm.
+
+-   Sulfate: Amount of Sulfates dissolved in mg/L.
+
+-   Conductivity: Electrical conductivity of water in μS/cm.
+
+-   Organic_carbon: Amount of organic carbon in ppm.
+
+-   Trihalomethanes: Amount of Trihalomethanes in μg/L.
+
+-   Turbidity: Measure of light emiting property of water in NTU.
+
+-   Potability: Indicates if water is safe for human consumption.
+    Potable 1 and Not potable 0
+
+## The goal of this project
+
+The goal of this project is to predict water potability based on water quality metrics.
+
+### Data preparation
+
+First we will load the dataset.
+
+```{r }
+df_water = read.csv("water_potability.csv")
+str(df_water)
+```
+
+**Study of the NULL values:**
+
+There are only null values for the features ph, Sulfate and Trihalomethanes variables.
+We show as well the proportion with respect to the potability target.
+
+```{r}
+# Count NaN values in each column
+nan_counts <- colSums(is.na(df_water))
+
+#Identify the variables with missing values
+variables_with_missing <- colnames(df_water)[colSums(is.na(df_water)) > 0]
+
+# Print the result
+print(nan_counts)
+
+target <- df_water$Potability
+
+# Calculate the missing data rate for each value of the target variable and each variable with missing values
+for (variable in variables_with_missing) {
+  missing_rate_potable_0 <- sum(is.na(df_water[df_water$Potability == 0, variable])) / sum(df_water$Potability == 0)
+  missing_rate_potable_1 <- sum(is.na(df_water[df_water$Potability == 1, variable])) / sum(df_water$Potability == 1)
+  
+  cat("Missing data rate for", variable, "and Potability = 0:", missing_rate_potable_0, "\n")
+  cat("Missing data rate for", variable, "and Potability = 1:", missing_rate_potable_1, "\n")
+}
+```
+
+To achieve a more accurate data imputation we will fill all null values with the median of each column grouping by the potability target.
+
+```{r}
+df_water <- group_by(df_water, Potability)
+df_water <- mutate(df_water, across(where(is.numeric), ~if_else(is.na(.), median(., na.rm = TRUE), as.numeric(.))))
+df_water <- ungroup(df_water)
+```
+
+### Exploratory analysis
+
+We will split our data set in training and testing sets as we did for the previous topic.
+
+```{r}
+# Set a seed for reproducibility
+set.seed(123)
+
+# Use sample to create a train/test split with shuffling
+index <- sample(1:nrow(df_water), 0.8 * nrow(df_water))
+
+# Create training and testing sets
+df_water_train <- df_water[index, ]
+df_water_test <- df_water[-index, ]
+```
+
+```{r}
+# Summary for the target variable
+prop.table(table(df_water_train$Potability))*100 # proportion
+```
+
+There is a 61.2% of the observations collected that are targeted as not potable.
+This could be solved by several methods such as oversampling the smaller class of undersampling the bigger class.
+Since the difference of proportion is not very significant we won't be modifying the data set.
+Instead we will consider that our benchmark model could be to predict always non potable outcomes.
+
+We will now study the correlation between the variables.
+
+```{r}
+# Calculate the correlation matrix
+cor_matrix <- cor(df_water_train)
+
+# Set the overall size of the plot (adjust as needed)
+par(mfrow = c(1, 1), mar = c(0.5, 0.5, 0.5, 0.5),oma = c(1,1, 1, 1))
+
+# Create a correlation heatmap with corrplot
+corrplot(cor_matrix, method = "color", col = colorRampPalette(c("blue", "white", "red"))(100), 
+         addCoef.col = "black", tl.col = "black",tl.cex = 0.7,number.cex = 0.6, tl.srt = 45)
+```
+
+Contrarily to our previous data set this data shows very little correlation between the variables.
+
+If we plot the density of each of the features by the factor potability, we see that the distribution of the variables behaves very similarly for the two classes.
+This may be indicating that predicting the potability accurately might be a challenge.
+
+```{r}
+df_water_train_long <- gather(df_water_train, key = "variable", value = "value", -Potability)
+
+ggplot(df_water_train_long, aes(x = value, fill = factor(Potability))) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(~ variable, scales = "free")
+```
+
+### Predictive analysis
+
+### Benchmark
+
+It is crucial to carefully choose the evaluation metric for our models.
+We must weigh the consequences of predicting potability when the actual instance is non-potable against predicting non-potability when the actual instance is potable.
+We will analyze both the accuracy and the precision of the models and try to achieve some balance between the two metrics.
+
+As said before since we have 61,2% of the training data targeted as non-potable water, our benchmark model will be then to predict that all data is non-potable.
+
+```{r}
+# Create a vector of predictions where all instances are predicted as non-potable (class 0)
+predictions_benchmark <- rep(0, nrow(df_water_test))
+
+# Create a confusion matrix for the benchmark model
+conf_matrix_benchmark <- table(Actual = df_water_test$Potability, Predicted = predictions_benchmark)
+
+# Display the confusion matrix
+print(conf_matrix_benchmark)
+# Calculate accuracy for the benchmark model
+accuracy_benchmark <- sum(diag(conf_matrix_benchmark)) / sum(conf_matrix_benchmark)
+# Precision for class 0 (non-potable)
+precision_benchmark <- conf_matrix_benchmark[1, 1] / sum(conf_matrix_benchmark[1,])
+
+# Display the results
+cat("Accuracy of the benchmark model:", accuracy_benchmark, "\n")
+cat("Precision of the benchmark model:", precision_benchmark, "\n")
+
+```
+
+We will have a low accuracy but a precision of 100%.
+It's important to note that this seemingly high precision is deceptive and indicative of a bad model.
+In reality, such a model is overly simplistic and doesn't provide meaningful insights.
+A more sophisticated model should aim to strike a balance between accuracy and precision.
+We will implement some generalized linear models that will try to do this.
+
+### GLM model fitting
+
+***First GLM model***
+
+For our first attempt, the *full_model* includes all available features in the training dataset.
+Then we apply stepwise variable selection based on the Akaike Information Criterion (AIC) to create a more concise model, stored in *selected_model*.
+A weighted approach is applied to address class imbalance, assigning a higher weight (1.3 times) to instances where water is potable (class 1), if we don't do this the model will predict all instances as non potable.
+
+```{r}
+# Model fitting using glm
+full_model <- glm(Potability ~ ., data = df_water_train, family = binomial,weights = ifelse(df_water_train$Potability == 1, 1.3, 1))
+#Display the full model
+summary(full_model)
+
+# Stepwise variable selection using AIC
+selected_model <- step(full_model)
+
+# Display the selected model summary
+summary(selected_model)
+
+# Model predictions on the test set
+predictions <- predict(selected_model, newdata = df_water_test, type = "response")
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+
+# Create a confusion matrix
+conf_matrix <- table(Actual = df_water_test$Potability, Predicted = predicted_classes)
+
+# If there is only one column, add a column for the other class (0)
+if (ncol(conf_matrix) == 1) {
+  conf_matrix <- cbind(conf_matrix, 0)
+}
+# Display the confusion matrix
+print(conf_matrix)
+```
+
+The formula selected by the step function is *Solids* + *Chloramines* + *Organic_carbon*.
+
+**Evaluation of the model:**
+
+```{r}
+# Calculate accuracy
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+cat("Accuracy of the with selected features: ", accuracy, "\n")
+
+# Calculate precision
+precision <- conf_matrix[2, 2] / sum(conf_matrix[, 2])
+cat("Precision of the with selected features: ", precision, "\n")
+
+```
+
+This accuracy and precision is worse than our benchmark so we will need to consider the interactions between variables in order to achieve some improvement.
+
+***Second GLM model***
+
+After trying with several sets of features and severral variables interactions we have selected the following model, that provides an improvement and some balance between precision and accuracy.
+
+```{r}
+# Better model fitting using glm
+model <- glm(Potability ~   Sulfate*Solids + ph*Sulfate, data = df_water_train, family = binomial)
+
+# Model summary
+summary(model)
+
+# Model predictions on the test set
+predictions <- predict(model, newdata = df_water_test, type = "response")
+
+# Convert predicted probabilities to binary predictions (0 or 1)
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+
+# Create a confusion matrix
+conf_matrix <- table(Actual = df_water_test$Potability, Predicted = predicted_classes)
+
+# Display the confusion matrix
+print(conf_matrix)
+```
+
+**Plot of the variable's interactions:**
+
+```{r}
+# Create an effect object for the interaction
+interaction_effect <- effect("Sulfate*Solids", model, data = df_water_train)
+
+# Plot the interaction
+plot(interaction_effect, multiline = FALSE, rug=FALSE,ci.style="band", rescale.axis=FALSE)
+```
+
+As we observe in the graph, for instances with high values in the variable Solids the probability of potability decreases when the sulfate increases.
+
+```{r}
+# Create an effect object for the interaction
+interaction_effect <- effect("Sulfate*ph", model, data = df_water_train)
+
+# Plot the interaction
+plot(interaction_effect, multiline = TRUE, rug=FALSE,ci.style="band", rescale.axis=FALSE)
+```
+
+Here we see that for low ph the probability of potability increases as the sulfate value increases.
+Instead for high ph values the probability decreases as the sulfate increases in value.
+
+**Evaluation of the model:**
+
+```{r}
+# Calculate accuracy
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+cat("Accuracy: ", accuracy, "\n")
+
+# Calculate precision
+precision <- conf_matrix[2, 2] / sum(conf_matrix[, 2])
+cat("Precision: ", precision, "\n")
+
+```
+
+This model provides with a reasonable balance between accuracy and precision, given the difficulty of the problem.
+
+Even if the accuracy metrics obtained have been low, these models can be useful to study the interaction and relation of the variables of the problem.
+
+We will now calculate the confidence interval of the betas.
+The following code will print the lower and upper bounds of the 95% confidence intervals for each coefficient in our logistic regression model
+
+```{r}
+# Confidence interval of the in the log-odds scale
+ci <- confint(model)
+ci
+```
+
+The intervals obtained are in the log-odds scale.
+If we are interested in odds ratios, we'll need to exponentiate the coefficients and their confidence intervals.
+
+```{r}
+# Exponentiate confidence interval bounds
+ci_exp <- exp(ci)
+ci_exp
+```
+
+This provides us with the odds ratios and their confidence intervals, making the results more interpretable.
+
+# Conclusion 
+
+In this project we have observed that depending on the problem we are studying we could be facing different challenges.
+The achieved prediction metrics as well as their expected value varies depending on the nature of the problem under study.
+In our first case study, we successfully achieved an an R-squared value of 87.1% in predicting relative air humidity.
+This problem exhibited clear linear dependencies between variables, allowing us to implement a multivariable linear model with accurate predictions.
+On the other hand, our second case study presented a different scenario.
+The data was considerably noisier, and the relationship between water potability and water characteristics proved difficult to interpret.
+The interaction between variables was crucial to extract some information about the model.
+For the future it would be interesting to apply other techniques to these problems such as decision trees or support vector machines that might give us more insight and be able to do a more accurate prediction.
